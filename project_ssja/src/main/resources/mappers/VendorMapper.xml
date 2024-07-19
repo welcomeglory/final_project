@@ -1,0 +1,570 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+        
+<mapper namespace="teamproject.ssja.mapper.VendorMapper">
+	<select id="selectVendor" parameterType="long" resultMap="VendorDtoMap">
+		<![CDATA[
+			select * from vendor where m_no=#{mNo}
+		]]>	
+	</select>
+<!-- 
+	private long vno;
+	private long vmno;
+	private String vbizname;
+	private String vaccount;
+	private String vlicense;
+	private String vfax;
+	
+	// 조인을 통해 member에 있는 이름을 가져오기
+	private String vmname;
+
+ -->
+ 	
+ <!-- 상품  -->
+ 	<!-- 최근 일주일 간 팔린 상품 매출 내역 -->
+ 	<select id="selectVendorSalesInWeek" resultMap="VendorSalesDtoMap">
+	 	<![CDATA[
+	 		SELECT 
+			    TRUNC(PUR_DATE) AS ORDER_DATE,
+			    SUM(CASE WHEN TRUNC(P.PUR_DATE) >= TRUNC(SYSDATE) - 7 AND TRUNC(P.PUR_DATE) < TRUNC(SYSDATE) THEN P.PUR_TOT ELSE 0 END) AS TOTAL_SALES,
+			    SUM(CASE WHEN TRUNC(P.PUR_DATE) >= TRUNC(SYSDATE) - 14 AND TRUNC(P.PUR_DATE) < TRUNC(SYSDATE) - 7 THEN P.PUR_TOT ELSE 0 END) AS LAST_TOTAL_SALES,			  
+			    COUNT(DISTINCT P.PUR_NO) AS PURCHASE_COUNT,
+			    (SELECT COUNT(DISTINCT P2.PUR_NO)
+			     FROM PURCHASE P2
+			     JOIN ORDERS O2 ON P2.PUR_NO = O2.PUR_NO
+			     JOIN PRODUCT PR2 ON O2.PRO_NO = PR2.PRO_NO
+			     JOIN VENDOR V2 ON PR2.V_NO = V2.V_NO
+			     WHERE TRUNC(P2.PUR_DATE) >= TRUNC(SYSDATE) - 14
+			       AND TRUNC(P2.PUR_DATE) < TRUNC(SYSDATE) - 7
+			       AND V2.V_NO = #{vno}
+			    ) AS LAST_PURCHASE_COUNT
+			FROM PURCHASE P
+			JOIN ORDERS O ON P.PUR_NO = O.PUR_NO
+			JOIN PRODUCT PR ON O.PRO_NO = PR.PRO_NO
+			JOIN VENDOR V ON PR.V_NO = V.V_NO
+			WHERE TRUNC(P.PUR_DATE) >= TRUNC(SYSDATE) - 7
+			  AND TRUNC(P.PUR_DATE) < TRUNC(SYSDATE)
+			  AND V.V_NO = #{vno}
+			GROUP BY TRUNC(P.PUR_DATE)
+			ORDER BY TRUNC(P.PUR_DATE)
+	 	]]>
+ 	</select>
+
+ 	<!-- 페이징은 기본으로 깔고 가기 -->
+	<select id="selectVendorProducts" resultMap="ProductsListMap">
+		 <![CDATA[
+			SELECT * FROM 
+			(
+			    SELECT
+			        rownum rnum, A.*
+			    FROM 
+			    (
+			        SELECT 
+			            P.*, 
+			            NVL(B.REVIEW_COUNT, 0) AS REVIEW_COUNT
+			        FROM 
+			            Product P
+			        LEFT JOIN
+			            (SELECT 
+			                 pro_no, 
+			                 COUNT(*) AS REVIEW_COUNT 
+			             FROM 
+			                 board 
+			             WHERE 
+			                 b_c_no = 30 
+			             GROUP BY 
+			                 pro_no) B
+			        ON 
+			            P.PRO_NO = B.pro_no
+			        WHERE 
+			            P.v_no = #{vno}
+			        ORDER BY 
+			            P.PRO_NO DESC
+			    ) A 
+			    WHERE 
+			        rownum <= #{pageNum} * #{amount}
+			)
+			WHERE 
+			    rnum > (#{pageNum}-1) * #{amount}
+   		 ]]>
+	</select>
+
+	<select id="selectVendorProductsOrderbyReviewCount" resultMap="ProductsListMap">
+		 <![CDATA[
+			SELECT * FROM 
+			(
+			    SELECT
+			        rownum rnum, A.*
+			    FROM 
+			    (
+			        SELECT 
+			            P.*, 
+			            NVL(B.REVIEW_COUNT, 0) AS REVIEW_COUNT
+			        FROM 
+			            Product P
+			        LEFT JOIN
+			            (SELECT 
+			                 pro_no, 
+			                 COUNT(*) AS REVIEW_COUNT 
+			             FROM 
+			                 board 
+			             WHERE 
+			                 b_c_no = 30 
+			             GROUP BY 
+			                 pro_no) B
+			        ON 
+			            P.PRO_NO = B.pro_no
+			        WHERE 
+			            P.v_no = #{vno}
+			        ORDER BY 
+           				REVIEW_COUNT DESC
+			    ) A 
+			    WHERE 
+			        rownum <= #{pageNum} * #{amount}
+			)
+			WHERE 
+			    rnum > (#{pageNum}-1) * #{amount}
+   		 ]]>
+	</select>
+
+
+
+	<!-- 상품 검색 결과를 보여주기 위한 목록 -->
+	<select id="selectVendorSearchProducts" resultMap="ProductsListMap">
+		 <![CDATA[
+			select * from 
+        	(
+			    select
+			        rownum rnum , A.*
+			    from ( 
+			    SELECT
+           P.PRO_NO,
+            P.V_NO,
+            P.P_C_NO,
+            P.PRO_PRICE,
+            P.PRO_QUANTITY,
+            P.PRO_BANNERIMG,
+            P.PRO_WISH,
+            P.PRO_SELLCOUNT,
+            P.PRO_HIT,
+            P.PRO_BIZNAME,
+            P.PRO_NAME,
+            P.PRO_DATE,
+            NVL(B.REVIEW_COUNT, 0) AS REVIEW_COUNT
+			        FROM 
+			            Product P
+			        LEFT JOIN
+			            (SELECT 
+			                bd.pro_no as boadpronum, 
+			                 COUNT(*) AS REVIEW_COUNT 
+			             FROM 
+			                 board bd
+			             WHERE 
+			                 b_c_no = 30 
+			             GROUP BY 
+			                 pro_no) B
+			        ON 
+			            P.PRO_NO = B.boadpronum
+			        WHERE 
+			            P.v_no = #{criteria.vno} and
+
+		 ]]>	    
+		<choose>     
+	        <when test="#{option} != null and option.equals('proNo')">
+	         PRO_NO like '%${keyword}%'
+	        </when> 
+	        <when test="#{option} != null and option.equals('proName')">
+	         PRO_NAME like '%${keyword}%'
+	        </when> 
+	        <when test="#{option} != null and option.equals('proPcName')">
+	         SUBSTR
+	         (PRO_NAME, 
+	          INSTR(PRO_NAME, '[', 1, 1) + 1, INSTR(PRO_NAME, ']', 1, 1) - INSTR(PRO_NAME, '[', 1, 1) - 1)	          
+ 			 like '%${keyword}%'
+	        </when> 
+       	</choose>
+         <![CDATA[			    
+  			    ORDER BY 
+			            P.PRO_NO DESC) A 
+		    	where rownum <= #{criteria.pageNum} * #{criteria.amount} 
+		    )
+			where rnum > (#{criteria.pageNum}-1) * #{criteria.amount}
+   		 ]]>
+	</select>
+
+	<!-- 상품 검색 데이터 총 수량 -->
+	<select id="selectVendorSearchProductsCount" resultType="java.lang.Long">
+		<![CDATA[
+			select count(*) from Product where v_no=#{criteria.vno} and 
+		 ]]>	    
+		<choose>     
+	        <when test="#{option} != null and option.equals('proNo')">
+	         PRO_NO like '%${keyword}%'
+	        </when> 
+	        <when test="#{option} != null and option.equals('proName')">
+	         PRO_NAME like '%${keyword}%'
+	        </when> 
+	        <when test="#{option} != null and option.equals('proPcName')">
+	         SUBSTR
+	         (PRO_NAME, 
+	          INSTR(PRO_NAME, '[', 1, 1) + 1, INSTR(PRO_NAME, ']', 1, 1) - INSTR(PRO_NAME, '[', 1, 1) - 1)	          
+ 			 like '%${keyword}%'
+	        </when> 
+       	</choose>
+	</select>
+
+	<select id="selectVendorProductsCount" resultType="java.lang.Long">
+		<![CDATA[
+			select count(*) from Product where v_no=#{vno}
+		]]>
+	</select>
+
+	<!-- 입력한 상품의 상품 번호를 가져오기. 이미지를 넣기 위해 필요한 작업 -->
+	<select id="selectInsertedProNum" resultType="java.lang.Long">
+		SELECT pro_no 
+		FROM product 
+		WHERE pro_bannerimg = #{PRO_BANNERIMG} 
+		  AND pro_quantity = #{PRO_QUANTITY} 
+		  AND pro_price = #{PRO_PRICE} 
+		  AND v_no = #{V_NO} 
+		  AND PRO_NAME = #{PRO_NAME}
+	</select>
+<!--상품 정보 입력 -->	
+	<insert id="insertProduct" parameterType="ProductDto">
+		<![CDATA[
+			INSERT INTO product 
+				(PRO_NO, V_NO, P_C_NO, PRO_PRICE, PRO_QUANTITY, PRO_BANNERIMG, PRO_WISH, PRO_SELLCOUNT, PRO_HIT, PRO_BIZNAME, PRO_NAME, PRO_DATE)			
+			VALUES (PRO_SEQ.nextval, #{V_NO}, #{P_C_NO}, #{PRO_PRICE},#{PRO_QUANTITY}, #{PRO_BANNERIMG}, 0, #{PRO_SELLCOUNT}, 0, #{PRO_BIZNAME}, #{PRO_NAME}, sysdate)
+		]]>
+	</insert>
+<!--상품 이미지 정보 입력 -->		
+	<insert id="insertProductImgs" parameterType="ProductImgDto">
+		<![CDATA[
+			INSERT INTO product_imgs(pro_img_no,pro_no,pro_img_path) VALUES (PRO_IMG_SEQ.nextval,#{pNo},#{piPath})
+		]]>
+	</insert>
+	
+	<select id="selectUpdateProductData" resultMap="ProductsListMap">
+		<![CDATA[
+			select * from Product where PRO_NO = #{proNo} 
+		]]>
+	</select>
+
+<!-- 이미지 데이터 가져오기 -->
+<!-- 	
+	<select id="selectUpdateProductImgsData" resultMap="ProductImgsMap">
+		<![CDATA[
+			select * from product_imgs where PRO_NO = #{proNo} 
+		]]>
+	</select>
+ -->
+ 
+<!-- 판매자의 상품 수정. 상품명과 가격만 수정 가능하게 함. -->	
+	<update id="updateProduct" parameterType="ProductDto">
+		<![CDATA[
+			UPDATE product
+			SET P_C_NO = #{P_C_NO},
+				PRO_PRICE = #{PRO_PRICE},
+				PRO_NAME = #{PRO_NAME}
+			WHERE PRO_NO = #{PRO_NO}
+		]]>
+	</update>
+
+<!-- 이미지 교체 작업 -->
+<!-- 	
+	<update id="updateProductImgs" parameterType="ProductImgDto">
+		<![CDATA[
+			UPDATE product_imgs
+			SET PRO_IMG_PATH = #{piPath}
+			WHERE PRO_IMG_NO = #{piNo} AND PRO_NO = #{pNo}
+		]]>
+	</update> 
+--> 
+<!-- 문의 -->	
+	<!-- 페이징은 기본으로 깔고 가기 -->
+	<select id="selectVendorQnas" resultMap="BoardDtoMap">
+		 <![CDATA[
+			select * from 
+        	(
+			    select
+			        rownum rnum , A.*
+			    from 
+			    (SELECT  * FROM board where b_c_no=#{bcno} and m_no=#{bmno}
+				order by B_NO desc) A 
+		    	where rownum <= #{pageNum} * #{amount} 
+		    )
+			where rnum > (#{pageNum}-1) * #{amount}
+   		 ]]>
+	</select>
+	
+	<!-- 판매자 전용 -->
+	<select id="selectSearchVendorQnas" resultMap="BoardDtoMap">
+		 <![CDATA[
+			select * from 
+        	(
+			    select
+			        rownum rnum , A.*
+			    from 
+			    (SELECT  * FROM board where b_c_no=#{criteria.bcno} and m_no=#{criteria.bmno} and 
+		 ]]>	    
+		<choose>     
+	        <when test="#{option} != null and option.equals('title')">
+	         B_TITLE like '%${keyword}%'
+	        </when> 
+	        <when test="#{option} != null and option.equals('content')">
+	         B_CONTENT like '%${keyword}%'
+	        </when> 
+	        <when test="#{option} != null and option.equals('title_and_content')">
+	         (B_TITLE like '%${keyword}%' or B_CONTENT like '%${keyword}%')
+	        </when> 
+	        <when test="#{option} != null and option.equals('writer')">
+	         B_WRITER like '%${keyword}%'
+	        </when> 
+       	</choose>
+         <![CDATA[
+				order by B_NO desc) A 
+		    	where rownum <= #{criteria.pageNum} * #{criteria.amount} 
+		    )
+			where rnum > (#{criteria.pageNum}-1) * #{criteria.amount}
+   		 ]]>
+	</select>
+	
+	<!-- 판매자 검색 결과 총 개수 -->
+	<select id="selectSearchVendorQnaCount" resultType="java.lang.Long">
+		 <![CDATA[
+		 SELECT COUNT(*)
+    	 FROM board where b_c_no=#{criteria.bcno} and m_no=#{criteria.bmno} and 
+		 ]]>	    
+		<choose>     
+	        <when test="#{option} != null and option.equals('title')">
+	         B_TITLE like '%${keyword}%'
+	        </when> 
+	        <when test="#{option} != null and option.equals('content')">
+	         B_CONTENT like '%${keyword}%'
+	        </when> 
+	        <when test="#{option} != null and option.equals('title_and_content')">
+	         (B_TITLE like '%${keyword}%' or B_CONTENT like '%${keyword}%')
+	        </when> 
+       	</choose>
+	</select>	
+	
+	<select id="selectVendorQnaCount" resultType="java.lang.Long">
+		<![CDATA[
+			select count(*) from board where b_c_no=#{bcno} and m_no=#{bmno}
+		]]>
+	</select>	
+	
+	<select id="getVendorInfoEtc" resultType="teamproject.ssja.dto.vendor.VendorEtcInfoDTO">
+	select nvl((select count(*) from product where pro_bizname = #{bizname} ),0) as countItems,
+	nvl(round((select avg(b_eval) from board
+	 where pro_no in((select pro_no from product where pro_bizname = #{bizname} ))),2),0) as avgVendorEval 
+	 from dual
+	</select>
+	
+	<select id="getVendorItemList" resultType="ProductDto">
+	SELECT a.pro_no, a.p_c_no, a.pro_price, a.pro_bannerimg, a.pro_wish,
+			a.pro_bizname, a.pro_name, a.avgeval, a.countrv
+	FROM (
+		SELECT p.*, rownum as rnum,
+				NVL(avg_eval.avg_eval,0) AS avgeval,
+				NVL(rv_count.rv_count, 0) AS countrv
+		FROM product p
+		LEFT JOIN (
+			SELECT pro_no, AVG(b_eval) AS avg_eval
+			FROM board GROUP BY pro_no
+			) avg_eval ON p.pro_no = avg_eval.pro_no
+		LEFT JOIN (
+			SELECT pro_no, COUNT(*) AS rv_count
+			FROM board GROUP BY pro_no
+			) rv_count ON p.pro_no = rv_count.pro_no
+		WHERE p.v_no = (SELECT v_no FROM vendor WHERE v_bizname = #{bizname})
+		  <if test="start != 0 and end != 0">
+            and p.pro_price between #{start} AND #{end} 
+        </if>
+		order by
+		<choose>
+                <when test='order != null || order != ""'>
+                    ${order}
+                </when>
+                
+                <otherwise>
+                    p.pro_sellcount DESC
+                </otherwise>
+            </choose>
+	) a
+	WHERE a.rnum BETWEEN #{pageNum} * 16 - 15 AND #{pageNum} * 16
+	</select>
+	
+	<select id="getVendorInfoCommu" resultType="teamproject.ssja.dto.vendor.CommunityViewDTO">
+		select
+		b.b_no, b.b_writer, b.b_title, i.b_img_path 
+		from board b
+		inner join board_imgs i 
+			on b.b_no = i.b_no
+		where b.b_c_no = 40 and 
+			b.pro_no in (select p.pro_no from product p where p.pro_bizname = #{bizname}) and 
+			rownum &lt;= 5
+	</select>
+	
+
+	
+	<select id="getProfitStatistic" resultType="teamproject.ssja.dto.vendor.VendorProfitDTO">
+
+	SELECT TO_CHAR(p.pur_date, '${dateCondition}') AS order_date,
+		SUM(p.pur_tot) AS total_sales,
+		od.pro_no,
+		pr.pro_name,
+		SUM(od.o_quantity) AS quantity
+	FROM purchase p
+	JOIN orders od ON p.pur_no = od.pur_no
+	JOIN product pr ON od.pro_no = pr.pro_no
+	WHERE pr.v_no = ${vno}
+	GROUP BY TO_CHAR(p.pur_date, '${dateCondition}'), od.pro_no, pr.pro_name
+
+	UNION ALL
+
+	SELECT 'Total' AS order_date,
+		SUM(p.pur_tot) AS total_sales,
+		NULL AS pro_no,
+		v.v_bizname AS pro_name,
+		SUM(od.o_quantity) AS quantity
+	FROM purchase p
+	JOIN orders od ON p.pur_no = od.pur_no
+	JOIN product pr ON od.pro_no = pr.pro_no
+	JOIN vendor v ON pr.v_no = v.v_no
+	WHERE v.v_no = ${vno}
+	GROUP BY v.v_bizname
+	ORDER BY ${condition}
+
+	
+	</select>
+	
+	
+	
+<!-- 통계 -->
+ 	<!-- 판매자 총계. 변수 생성을 최대한 줄이기 위해 기존 변수를 일부 활용. -->
+ 	<select id="selectVendorSalesTotal" resultMap="VendorSalesDtoMap">
+ 		<![CDATA[
+ 		SELECT 
+		     COUNT(DISTINCT P.PUR_NO) AS PURCHASE_COUNT,
+		     SUM(P.PUR_TOT) AS TOTAL_SALES,
+		     SUM(O_QUANTITY) AS PRODUCT_SOLD_COUNT       
+		FROM PURCHASE P, ORDERS O, PRODUCT PR, VENDOR V
+		WHERE P.PUR_NO = O.PUR_NO
+		AND O.PRO_NO = PR.PRO_NO
+		AND PR.V_NO = V.V_NO
+		AND V.V_NO = #{vno}
+ 		]]>
+ 	</select>
+ 	
+ 	<!-- 특정 월 기준으로, 하루 단위로 일별 데이터 조회  -->
+ 	<select id="selectVendorSalesInDay" resultMap="VendorSalesDtoMap">
+ 		<![CDATA[
+	 		SELECT TO_CHAR(PUR_DATE, 'YYYY-MM-DD') AS ORDER_DATE,
+			       SUM(P.pur_TOT) AS TOTAL_SALES,
+			       COUNT(DISTINCT P.PUR_NO) AS PURCHASE_COUNT
+			FROM PURCHASE P
+			JOIN ORDERS OD ON P.PUR_NO = OD.PUR_NO
+			JOIN PRODUCT PR ON OD.PRO_NO = PR.PRO_NO
+			JOIN VENDOR V ON PR.V_NO = V.V_NO
+			WHERE TO_CHAR(P.PUR_DATE, 'YYYY-MM') = #{dateStr} 
+			AND V.V_NO = #{vno}
+			GROUP BY TO_CHAR(PUR_DATE, 'YYYY-MM-DD')
+			ORDER BY ORDER_DATE
+ 		]]> 
+ 	</select>
+
+	<!-- 특정 년 기준으로, 한 달 단위로 월별 데이터 조회  -->
+	<select id="selectVendorSalesInMonth" resultMap="VendorSalesDtoMap">
+ 		<![CDATA[
+	 		SELECT TO_CHAR(PUR_DATE, 'YYYY-MM') AS ORDER_DATE,
+			       SUM(P.pur_TOT) AS TOTAL_SALES,
+			       COUNT(DISTINCT P.PUR_NO) AS PURCHASE_COUNT
+			FROM PURCHASE P
+			JOIN ORDERS OD ON P.PUR_NO = OD.PUR_NO
+			JOIN PRODUCT PR ON OD.PRO_NO = PR.PRO_NO
+			JOIN VENDOR V ON PR.V_NO = V.V_NO
+			WHERE TO_CHAR(P.PUR_DATE, 'YYYY') = #{dateStr}
+			AND V.V_NO = #{vno}
+			GROUP BY TO_CHAR(PUR_DATE, 'YYYY-MM')
+			ORDER BY ORDER_DATE
+ 		]]> 		
+ 	</select>
+
+	<!-- 일 년 단위로, 연도별 데이터 조회  -->
+	<select id="selectVendorSalesInYear" resultMap="VendorSalesDtoMap">
+ 		<![CDATA[
+	 		SELECT TO_CHAR(PUR_DATE, 'YYYY') AS ORDER_DATE,
+			       SUM(P.pur_TOT) AS TOTAL_SALES,
+			       COUNT(DISTINCT P.PUR_NO) AS PURCHASE_COUNT			       
+			FROM PURCHASE P
+			JOIN ORDERS OD ON P.PUR_NO = OD.PUR_NO
+			JOIN PRODUCT PR ON OD.PRO_NO = PR.PRO_NO
+			JOIN VENDOR V ON PR.V_NO = V.V_NO
+			WHERE TO_CHAR(P.PUR_DATE, 'YYYY') = #{dateStr}
+			AND V.V_NO = #{vno}
+			GROUP BY TO_CHAR(PUR_DATE, 'YYYY')
+			ORDER BY ORDER_DATE
+ 		]]> 		
+ 	</select>
+ 		
+	<!-- 게시글 맵 -->	
+<!-- 맵 -->
+	<resultMap type="teamproject.ssja.dto.VendorSalesDto" id="VendorSalesDtoMap">
+		<result property="orderDate" column="ORDER_DATE"/>
+		<result property="totalSales" column="TOTAL_SALES"/>
+		<result property="purchaseCount" column="PURCHASE_COUNT"/>
+		<result property="lastTotalSales" column="LAST_TOTAL_SALES"/>
+		<result property="lastPurchaseCount" column="LAST_PURCHASE_COUNT"/>
+		<result property="productSoldCount" column="PRODUCT_SOLD_COUNT"/>
+	</resultMap>
+	
+	<resultMap type="teamproject.ssja.dto.BoardDto" id="BoardDtoMap">
+		<id property="bno" column="b_no"/>
+		<result property="bmno" column="m_no"/>
+		<result property="bbcno" column="b_c_no"/>
+		<result property="bwriter" column="b_writer"/>
+		<result property="btitle" column="b_title"/>
+		<result property="bcontent" column="b_content"/>
+		<result property="bdate" column="b_date"/>
+		<result property="blike" column="b_like"/>
+		<result property="bhit" column="b_hit"/>
+		<result property="beval" column="b_eval"/>
+		<result property="prono" column="pro_no"/>
+	</resultMap>
+	
+	
+	<resultMap type="teamproject.ssja.dto.vendor.VendorInfoDTO" id="VendorDtoMap">
+		<id property="v_no" column="V_NO"/>
+		<result property="id" column="M_NO"/>
+		<result property="v_bizName" column="V_BIZNAME"/>
+		<result property="v_account" column="V_ACCOUNT"/>
+		<result property="v_license" column="V_LICENSE"/>
+		<result property="v_FAX" column="V_FAX"/>
+	</resultMap>	
+	
+	<resultMap type="teamproject.ssja.dto.ProductDto" id="ProductsListMap">
+		<id property="PRO_NO" column="PRO_NO" />
+		<result property="V_NO" column="V_NO" />
+		<result property="P_C_NO" column="P_C_NO" />
+		<result property="PRO_PRICE" column="PRO_PRICE" />
+		<result property="PRO_QUANTITY" column="PRO_QUANTITY" />
+		<result property="PRO_BANNERIMG" column="PRO_BANNERIMG" />
+		<result property="PRO_WISH" column="PRO_WISH" />
+		<result property="PRO_SELLCOUNT" column="PRO_SELLCOUNT" />
+		<result property="PRO_HIT" column="PRO_HIT" />
+		<result property="PRO_BIZNAME" column="PRO_BIZNAME" />
+		<result property="PRO_NAME" column="PRO_NAME" />
+		<result property="PRO_DATE" column="PRO_DATE" />
+		<result property="reviewCount" column="REVIEW_COUNT" />
+	</resultMap>
+	
+	<resultMap type="teamproject.ssja.dto.ProductImgDto" id="ProductImgsMap">
+		<result property="piNo" column="PRO_IMG_NO"/>
+		<result property="pNo" column="PRO_NO"/>
+		<result property="piPath" column="PRO_IMG_PATH"/>
+	</resultMap>
+	
+	
+</mapper>
